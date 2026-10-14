@@ -1,0 +1,5 @@
+bleak==3.0.2
+qasync==0.28.0
+# PySide6 6.12 breaks qfluentwidgets spin boxes (edit field laid out 1px wide)
+PySide6==6.11.2
+PySide6-Fluent-Widgets==1.11.3

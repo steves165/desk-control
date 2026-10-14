@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 com rescap">
+
+  <Identity Name="DeskControl.Widget" Publisher="CN=DeskControl" Version="$VERSION$" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Desk Control</DisplayName>
+    <PublisherDisplayName>Desk Control</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.1.8" MinVersion="$RUNTIME_VERSION$"
+      Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-gb" />
+  </Resources>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="App" Executable="DeskWidget.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Desk Control widget" Description="Desk presets for the Widgets board"
+        BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" AppListEntry="none" />
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="DeskWidget.exe" Arguments="-RegisterProcessAsComServer" DisplayName="Desk Control widget provider">
+              <com:Class Id="FB597772-7FB9-498A-B54C-DDC17E54D538" DisplayName="DeskWidgetProvider" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="com.microsoft.windows.widgets" DisplayName="Desk Control" Id="DeskControl" PublicFolder="Public">
+            <uap3:Properties>
+              <WidgetProvider>
+                <ProviderIcons>
+                  <Icon Path="Assets\StoreLogo.png" />
+                </ProviderIcons>
+                <Activation>
+                  <CreateInstance ClassId="FB597772-7FB9-498A-B54C-DDC17E54D538" />
+                </Activation>
+                <Definitions>
+                  <Definition Id="DeskPresets" DisplayName="Desk" Description="Your desk's height and presets" AllowMultiple="false">
+                    <Capabilities>
+                      <Capability><Size Name="small" /></Capability>
+                      <Capability><Size Name="medium" /></Capability>
+                      <Capability><Size Name="large" /></Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Assets\WidgetIcon.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Assets\WidgetScreenshot.png" DisplayAltText="Desk height with Sit and Stand preset buttons" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+                </Definitions>
+              </WidgetProvider>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

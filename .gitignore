@@ -1,0 +1,4 @@
+__pycache__/
+widget/bin/
+widget/obj/
+*.msix
