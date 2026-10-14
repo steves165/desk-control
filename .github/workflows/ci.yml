@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-agent.txt boto3 pytest
+      - run: python -m pytest tests alexa/lambda
+
+  addon:
+    # Builds the Home Assistant add-on's image from this commit, as Home Assistant would from a release tag.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --build-arg SOURCE_REF=${{ github.sha }} -t desk-agent desk-agent
+      - name: The agent starts and makes its pairing key
+        run: |
+          mkdir data
+          timeout 10 docker run --rm -v "$PWD/data:/config" desk-agent || true
+          sudo cat data/agent.json
+          grep -q '"key"' data/agent.json

@@ -28,13 +28,14 @@ if sys.platform == "win32":
 
 import alexa_link
 import ipc
+import remote
 from desk import MAX_POSITION, LinakDesk, NotLinakError, scan_devices, verify_desk
 from icons import tray_icon, window_icon
 
 SETTINGS_PATH = Path(os.environ.get("APPDATA", Path.home())) / "DeskControl" / "settings.json"
 LOG_PATH = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "desk-control" / "desk-control.log"
 DEFAULT_SETTINGS = {"address": None, "desk_name": None, "offset_mm": 620.0, "presets": [], "tray_hint_shown": False,
-                    "alexa": True}
+                    "alexa": True, "agent": None}
 
 
 def load_settings() -> dict:
@@ -101,8 +102,9 @@ async def run_dialog(dialog: QDialog) -> bool:
 class DeskPickerDialog(MessageBoxBase):
     """Scans for Bluetooth devices and checks the chosen one is a Linak desk controller."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, scan=scan_devices, verify=verify_desk):
         super().__init__(parent)
+        self._scan, self._verify = scan, verify
         self.chosen: dict | None = None
         self.devices: list[dict] = []
         self.busy = False
@@ -159,7 +161,7 @@ class DeskPickerDialog(MessageBoxBase):
         self._set_busy(True, "Scanning for Bluetooth devices…")
         self.list.clear()
         try:
-            self.devices = await scan_devices()
+            self.devices = await self._scan()
         finally:
             for device in self.devices:
                 item = QListWidgetItem(f"{device['name']}  ({device['address']})")
@@ -180,7 +182,7 @@ class DeskPickerDialog(MessageBoxBase):
     async def verify(self, device: dict) -> None:
         self._set_busy(True, f"Pairing with {device['name']}… this can take up to 30 seconds.")
         try:
-            await verify_desk(device["address"], device["name"])
+            await self._verify(device["address"], device["name"])
         except NotLinakError as e:
             self._set_busy(False, "")
             self.error("Not a desk controller", f"{e} Choose your desk's Linak controller instead.")
@@ -191,6 +193,70 @@ class DeskPickerDialog(MessageBoxBase):
                        f"{str(e) or type(e).__name__}. If this is your desk, put it in pairing mode and try again.")
             return
         self.chosen = device
+        self.accept()
+
+
+class AgentDialog(MessageBoxBase):
+    """Connects the app to a desk agent (agent.py) on an always-on box, or back to this PC's Bluetooth."""
+
+    def __init__(self, parent, agent: dict | None):
+        super().__init__(parent)
+        self.result: dict | None = None
+        self.state: dict | None = None
+        self.busy = False
+        self._task: asyncio.Task | None = None
+        self.viewLayout.addWidget(SubtitleLabel("Desk Control box", self))
+        hint = BodyLabel(
+            "Let an always-on box, such as a Home Assistant server running the Desk Control add-on, hold the "
+            "desk's connection. Enter its address and the pairing key from the add-on's log.", self)
+        hint.setWordWrap(True)
+        self.viewLayout.addWidget(hint)
+        self.host_edit = LineEdit(self)
+        self.host_edit.setPlaceholderText("Address, e.g. homeassistant.local")
+        self.key_edit = LineEdit(self)
+        self.key_edit.setPlaceholderText("Pairing key, e.g. 1A2B-3C4D-5E6F-7A8B")
+        if agent:
+            self.host_edit.setText(agent["host"])
+            self.key_edit.setText(agent["key"])
+        self.viewLayout.addWidget(self.host_edit)
+        self.viewLayout.addWidget(self.key_edit)
+        self.status = CaptionLabel("", self)
+        self.status.setWordWrap(True)
+        self.viewLayout.addWidget(self.status)
+        self.yesButton.setText("Connect")
+        if agent:
+            self.local_button = PushButton("Use this PC", self.buttonGroup)
+            self.local_button.setToolTip("Stop using the box and connect to the desk from this PC")
+            self.local_button.clicked.connect(self._use_local)
+            self.buttonLayout.insertWidget(1, self.local_button)
+        self.widget.setMinimumWidth(340)
+        self.finished.connect(lambda _: self._task and self._task.cancel())
+
+    def _use_local(self) -> None:
+        self.result = {}
+        self.accept()
+
+    def validate(self) -> bool:
+        host, key = self.host_edit.text().strip(), self.key_edit.text().strip()
+        if not self.busy and host and key:
+            self._task = spawn(self._check(host, key))
+        return False
+
+    async def _check(self, host: str, key: str) -> None:
+        self.busy = True
+        self.yesButton.setEnabled(False)
+        self.status.setText(f"Connecting to {host}…")
+        try:
+            self.state = await remote.check(host, key)
+        except Exception as e:
+            self.status.setText("")
+            InfoBar.error(f"Couldn't connect to {host}", str(e) or type(e).__name__, parent=self,
+                          position=InfoBarPosition.TOP, duration=10000)
+            return
+        finally:
+            self.busy = False
+            self.yesButton.setEnabled(True)
+        self.result = {"host": host, "key": key}
         self.accept()
 
 
@@ -218,6 +284,10 @@ it in <b>Settings → Calibrate height</b>.</p>
 icon for your presets, Stop and Quit. The app also starts in the tray when you sign in to Windows.</p>
 <p>To add the widget, press <b>Win+W</b>, click <b>+</b>, find <b>Desk Control</b> and pin the
 <b>Desk</b> widget. It shows the height and your presets while the app is running.</p>
+<h3>Desk Control box</h3>
+<p>An always-on Home Assistant box running the Desk Control add-on can hold the desk's connection instead of
+this PC. Use <b>Settings → Desk Control box…</b> with the box's address and the pairing key from the add-on's
+log. <b>Use this PC</b> in the same place switches back.</p>
 <h3>Alexa</h3>
 <p>With an Alexa skill of your own set up (see <code>alexa/README.md</code> in the project), you can say
 “Alexa, set the desk to Stand”. <b>Settings → Alexa</b> turns the link off and on. After changing presets,
@@ -290,6 +360,7 @@ class DeskWindow(FluentWidget):
         self.closed = asyncio.Event()
         self.control = ipc.ControlServer(self.handle_request)
         self.alexa: alexa_link.AlexaLink | None = None
+        self.pending_upload = False
 
         self.setWindowTitle("Desk Control")
         self.setWindowIcon(window_icon())
@@ -416,14 +487,23 @@ class DeskWindow(FluentWidget):
 
     # --- desk wiring -----------------------------------------------------
     async def connect_desk(self) -> None:
-        if self.settings.get("address"):
+        if self.settings.get("agent") or self.settings.get("address"):
             self.start_desk(self.settings["address"])
         else:
             self.on_state("nodesk", "")
             await self.choose_desk()
 
-    def start_desk(self, address: str) -> None:
-        self.desk = LinakDesk(address)
+    @property
+    def remote(self) -> bool:
+        return isinstance(self.desk, remote.RemoteDesk)
+
+    def start_desk(self, address: str | None = None) -> None:
+        agent = self.settings.get("agent")
+        if agent:
+            self.desk = remote.RemoteDesk(agent["host"], agent["key"])
+            self.desk.on_settings = self.on_remote_settings
+        else:
+            self.desk = LinakDesk(address or self.settings["address"])
         self.desk.on_position = self.on_position
         self.desk.on_state = self.on_state
         self._run_task = spawn(self.desk.run(), self.show_error)
@@ -438,6 +518,12 @@ class DeskWindow(FluentWidget):
         self.on_state("nodesk", "")
 
     async def choose_desk(self) -> None:
+        if self.remote:
+            # The box pairs with the desk itself, from its own Bluetooth adapter.
+            self.show_window()
+            dialog = DeskPickerDialog(self, scan=self.desk.scan, verify=self.desk.choose)
+            await run_dialog(dialog)
+            return
         previous = self.settings.get("address")
         # The desk accepts one connection at a time, so let go of it while pairing.
         await self.stop_desk()
@@ -458,7 +544,9 @@ class DeskWindow(FluentWidget):
         calibrate = Action(FIF.EDIT, "Calibrate height…", menu, triggered=self.calibrate)
         calibrate.setEnabled(bool(self.desk and self.desk.connected))
         menu.addAction(calibrate)
-        if alexa_link.configured():
+        menu.addAction(Action(FIF.IOT, "Desk Control box…", menu,
+                              triggered=lambda: spawn(self.choose_agent(), self.show_error)))
+        if alexa_link.configured() and not self.settings.get("agent"):
             alexa = Action(FIF.MICROPHONE, "Alexa", menu, checkable=True)
             alexa.setChecked(bool(self.settings["alexa"]))
             alexa.toggled.connect(self.set_alexa)
@@ -468,8 +556,57 @@ class DeskWindow(FluentWidget):
         button = self.settings_button
         menu.exec(button.mapToGlobal(QPoint(button.width() - menu.sizeHint().width(), button.height())))
 
+    async def choose_agent(self) -> None:
+        self.show_window()
+        dialog = AgentDialog(self, self.settings.get("agent"))
+        if not await run_dialog(dialog) or dialog.result is None:
+            return
+        agent = dialog.result or None
+        await self.stop_desk()
+        self.settings["agent"] = agent
+        save_settings(self.settings)
+        if agent:
+            # The box holds the desk's connection now (and talks to Alexa).
+            self.set_alexa_running(False)
+            remote_settings = dialog.state["settings"]
+            if not remote_settings["presets"] and self.settings["presets"]:
+                # First time on this box: take this PC's presets and calibration along.
+                self.pending_upload = True
+        else:
+            self.set_alexa_running(self.settings["alexa"])
+        await self.connect_desk()
+
+    def on_remote_settings(self, settings: dict) -> None:
+        if self.pending_upload:
+            self.pending_upload = False
+            spawn(self.desk.save_settings(presets=self.settings["presets"], offset_mm=self.settings["offset_mm"]),
+                  self.show_error)
+            return
+        self.settings["presets"] = settings["presets"]
+        self.settings["offset_mm"] = settings["offset_mm"]
+        self.settings["desk_name"] = settings["desk_name"]
+        save_settings(self.settings)
+        self.render_presets()
+        if self.desk.position is not None:
+            self.on_position(self.desk.position, self.desk.speed)
+        self.on_state(self.desk.state, self.desk.detail)
+
+    def settings_changed(self) -> None:
+        """Presets or calibration changed here: save them, and in remote mode send them to the box."""
+        save_settings(self.settings)
+        if self.remote:
+            spawn(self.desk.save_settings(presets=self.settings["presets"], offset_mm=self.settings["offset_mm"]),
+                  self.show_error)
+
+    def set_alexa_running(self, running: bool) -> None:
+        if running and not self.alexa:
+            self.start_alexa()
+        elif not running and self.alexa:
+            self.alexa.stop()
+            self.alexa = None
+
     def start_alexa(self) -> None:
-        if not alexa_link.configured():
+        if self.settings.get("agent") or not alexa_link.configured():
             return
         try:
             self.alexa = alexa_link.AlexaLink(self.handle_request)
@@ -484,11 +621,7 @@ class DeskWindow(FluentWidget):
     def set_alexa(self, enabled: bool) -> None:
         self.settings["alexa"] = enabled
         save_settings(self.settings)
-        if enabled:
-            self.start_alexa()
-        elif self.alexa:
-            self.alexa.stop()
-            self.alexa = None
+        self.set_alexa_running(enabled)
 
     def report_alexa(self) -> None:
         if not self.alexa:
@@ -513,6 +646,9 @@ class DeskWindow(FluentWidget):
             "connected": f"Connected to {desk_name}",
             "disconnected": "Disconnected",
         }[state]
+        if self.remote and not self.desk.agent_online:
+            text = ("Wrong pairing key for the box" if self.desk.auth_failed
+                    else "Connecting to the box…" if state == "connecting" else "Can't reach the box")
         self.choose_button.setVisible(state == "nodesk")
         self.status_label.setText(text)
         self.status_label.setToolTip(detail)
@@ -575,12 +711,12 @@ class DeskWindow(FluentWidget):
                 "height_cm": round(dialog.height_box.value(), 1),
             })
             self.settings["presets"].sort(key=lambda p: p["height_cm"])
-            save_settings(self.settings)
+            self.settings_changed()
             self.render_presets()
 
     def delete_preset(self, index: int) -> None:
         del self.settings["presets"][index]
-        save_settings(self.settings)
+        self.settings_changed()
         self.render_presets()
 
     def calibrate(self) -> None:
@@ -594,7 +730,7 @@ class DeskWindow(FluentWidget):
         )
         if dialog.exec():
             self.settings["offset_mm"] = dialog.height_box.value() * 10 - self.desk.position / 10
-            save_settings(self.settings)
+            self.settings_changed()
             self.on_position(self.desk.position, self.desk.speed)
             self.render_presets()
 

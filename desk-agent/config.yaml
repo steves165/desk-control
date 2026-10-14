@@ -1,0 +1,22 @@
+name: Desk Control
+version: "1.0.0"
+slug: desk_control
+description: Keeps a Linak (IKEA Idåsen) standing desk connected, for the Desk Control app and its Alexa skill
+url: https://github.com/steves165/desk-control
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+# Bluetooth goes through the host's BlueZ, over D-Bus.
+host_dbus: true
+ports:
+  8574/tcp: 8574
+ports_description:
+  8574/tcp: Desk Control app
+# Settings, the pairing key and the Alexa certificate live in /config: the add-on's own folder in addon_configs,
+# reachable with the Samba share or File editor add-ons.
+map:
+  - type: addon_config
+    read_only: false

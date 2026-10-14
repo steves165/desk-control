@@ -16,6 +16,8 @@ height, save presets, and move the desk to them from the app, the system tray or
 - **Tray icon** with your presets, Stop and Quit. Desk Control starts in the tray when you sign in, so the desk is
   already connected when you need it.
 - **Widgets board widget** (Win+W) showing the height, your presets and Stop.
+- **Desk Control box**, optionally: a Home Assistant add-on holds the desk's connection on an always-on box, and
+  the app and Alexa use it from there.
 - **Alexa**, optionally: “Alexa, set the desk to Stand”, through a smart home skill you host on your own AWS
   account. See [alexa/README.md](alexa/README.md).
 - Picks your desk from a list of Bluetooth devices the first time you run it, checks it really is a Linak
@@ -114,6 +116,20 @@ Press **Win+W**, click **+**, choose **Desk Control** and pin the **Desk** widge
 shows the height and your presets while Desk Control is running, and highlights the preset you're at. If Desk
 Control isn't running, the widget offers to open it.
 
+### Desk Control box (Home Assistant)
+
+If you have an always-on Home Assistant box near the desk, it can hold the desk's connection instead of your
+PC, so Alexa works while the PC is off.
+
+1. In Home Assistant, open **Settings → Add-ons → Add-on store**, then **⋮ → Repositories**, and add
+   `https://github.com/steves165/desk-control`.
+2. Install the **Desk Control** add-on, start it, and find the pairing key in its **Log** tab.
+3. In the app, open **Settings → Desk Control box…** and enter the box's address and the pairing key.
+
+The add-on's Documentation tab covers choosing the desk from the box and moving Alexa over. Without Home
+Assistant, run the agent on any always-on machine with Bluetooth: `pip install -r requirements-agent.txt`, then
+`python agent.py --data <folder>`.
+
 Help with all of this is also built into the app: click **?** in the top-right corner.
 
 ## Troubleshooting
@@ -144,6 +160,8 @@ This removes the app, its shortcuts, the widget package and the signing certific
 | `icons.py` | Draws the app, tray and widget icons. |
 | `widget/` | Widgets board provider in C# (Windows App SDK 1.8, out-of-process COM server), packaged as a signed MSIX by `build.ps1`. |
 | `alexa_link.py`, `alexa/` | Optional Alexa skill: the app's MQTT link to AWS IoT Core, the skill's Lambda function and its Terraform. See [alexa/README.md](alexa/README.md). |
+| `agent.py`, `remote.py` | The desk agent for an always-on box, and the app's client for it (protocol in `remote.py`). |
+| `desk-agent/`, `repository.yaml` | The Home Assistant add-on that runs the agent. |
 | `probe.py` | Developer tool: pairs with a desk and lists its Bluetooth services. |
 | `install.ps1` / `uninstall.ps1` | Installer and uninstaller. `install.sh` runs `install.ps1` from WSL. |
 
@@ -167,6 +185,10 @@ long-lived connection.
 - Run from source after installing: `%LOCALAPPDATA%\desk-control\venv\Scripts\python.exe app.py`. Quit the
   installed copy first (tray → Quit); otherwise the second copy just brings the first one to the front.
 - Rebuild only the widget: `.\widget\build.ps1 -Python "$env:LOCALAPPDATA\desk-control\venv\Scripts\python.exe"`.
+- Tests: `pip install -r requirements-agent.txt boto3 pytest`, then `python -m pytest tests alexa/lambda`. CI runs
+  them and builds the add-on's image on every push.
+- Releasing the add-on: bump `version` in `desk-agent/config.yaml`, push, and tag the commit `agent-v<version>`;
+  Home Assistant builds the add-on from that tag.
 - Developing in WSL: `./install.sh` (Bluetooth is only reachable from the Windows side).
 - PySide6 is pinned to 6.11.2: in 6.12, PySide6-Fluent-Widgets' spin boxes lay out their text field 1 px wide.
 
