@@ -16,6 +16,8 @@ height, save presets, and move the desk to them from the app, the system tray or
 - **Tray icon** with your presets, Stop and Quit. Desk Control starts in the tray when you sign in, so the desk is
   already connected when you need it.
 - **Widgets board widget** (Win+W) showing the height, your presets and Stop.
+- **Alexa**, optionally: “Alexa, set the desk to Stand”, through a smart home skill you host on your own AWS
+  account. See [alexa/README.md](alexa/README.md).
 - Picks your desk from a list of Bluetooth devices the first time you run it, checks it really is a Linak
   controller, and reconnects to it automatically from then on.
 
@@ -130,7 +132,7 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```
 
 This removes the app, its shortcuts, the widget package and the signing certificate (one UAC prompt). Add
-`-KeepSettings` to keep your presets. To unpair the desk, remove it in Settings → Bluetooth & devices.
+`-KeepSettings` to keep your presets. If you set up Alexa, see [Removing it](alexa/README.md#removing-it) too. To unpair the desk, remove it in Settings → Bluetooth & devices.
 
 ## How it works
 
@@ -141,6 +143,7 @@ This removes the app, its shortcuts, the widget package and the signing certific
 | `ipc.py` | Named pipe `\\.\pipe\DeskControl` (current user only), used by the widget and installer to talk to the running app. |
 | `icons.py` | Draws the app, tray and widget icons. |
 | `widget/` | Widgets board provider in C# (Windows App SDK 1.8, out-of-process COM server), packaged as a signed MSIX by `build.ps1`. |
+| `alexa_link.py`, `alexa/` | Optional Alexa skill: the app's MQTT link to AWS IoT Core, the skill's Lambda function and its Terraform. See [alexa/README.md](alexa/README.md). |
 | `probe.py` | Developer tool: pairs with a desk and lists its Bluetooth services. |
 | `install.ps1` / `uninstall.ps1` | Installer and uninstaller. `install.sh` runs `install.ps1` from WSL. |
 

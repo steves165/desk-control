@@ -1,0 +1,6 @@
+# Copy to backend.hcl (git-ignored) and point it at an S3 bucket of yours.
+bucket       = "my-terraform-state"
+key          = "desk-control/alexa/terraform.tfstate"
+region       = "eu-west-1"
+encrypt      = true
+use_lockfile = true

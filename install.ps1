@@ -65,7 +65,7 @@ try {
 
     $wasRunning = Send-DeskCommand '{"cmd": "quit"}'
     if ($wasRunning) { Start-Sleep -Seconds 3 }
-    Copy-Item "$src\app.py", "$src\desk.py", "$src\ipc.py", "$src\icons.py" "$dest\app" -Force
+    Copy-Item "$src\app.py", "$src\desk.py", "$src\ipc.py", "$src\icons.py", "$src\alexa_link.py" "$dest\app" -Force
 
     New-Shortcut 'Programs' ''
     $startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'Desk Control.lnk'

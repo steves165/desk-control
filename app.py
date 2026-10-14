@@ -26,13 +26,15 @@ if sys.platform == "win32":
     from bleak.backends.winrt.util import allow_sta
     allow_sta()
 
+import alexa_link
 import ipc
-from desk import LinakDesk, NotLinakError, scan_devices, verify_desk
+from desk import MAX_POSITION, LinakDesk, NotLinakError, scan_devices, verify_desk
 from icons import tray_icon, window_icon
 
 SETTINGS_PATH = Path(os.environ.get("APPDATA", Path.home())) / "DeskControl" / "settings.json"
 LOG_PATH = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "desk-control" / "desk-control.log"
-DEFAULT_SETTINGS = {"address": None, "desk_name": None, "offset_mm": 620.0, "presets": [], "tray_hint_shown": False}
+DEFAULT_SETTINGS = {"address": None, "desk_name": None, "offset_mm": 620.0, "presets": [], "tray_hint_shown": False,
+                    "alexa": True}
 
 
 def load_settings() -> dict:
@@ -216,6 +218,10 @@ it in <b>Settings → Calibrate height</b>.</p>
 icon for your presets, Stop and Quit. The app also starts in the tray when you sign in to Windows.</p>
 <p>To add the widget, press <b>Win+W</b>, click <b>+</b>, find <b>Desk Control</b> and pin the
 <b>Desk</b> widget. It shows the height and your presets while the app is running.</p>
+<h3>Alexa</h3>
+<p>With an Alexa skill of your own set up (see <code>alexa/README.md</code> in the project), you can say
+“Alexa, set the desk to Stand”. <b>Settings → Alexa</b> turns the link off and on. After changing presets,
+say “Alexa, discover devices”.</p>
 <h3>Troubleshooting</h3>
 <ul>
 <li>Only one device can be connected to the desk at a time. Close the desk's phone app if it won't connect.</li>
@@ -283,6 +289,7 @@ class DeskWindow(FluentWidget):
         self._quitting = False
         self.closed = asyncio.Event()
         self.control = ipc.ControlServer(self.handle_request)
+        self.alexa: alexa_link.AlexaLink | None = None
 
         self.setWindowTitle("Desk Control")
         self.setWindowIcon(window_icon())
@@ -391,6 +398,8 @@ class DeskWindow(FluentWidget):
 
         self.render_presets()
         self.set_controls_enabled(False)
+        if self.settings["alexa"]:
+            self.start_alexa()
         QTimer.singleShot(0, lambda: spawn(self.connect_desk(), self.show_error))
 
     # --- unit conversion -------------------------------------------------
@@ -449,10 +458,48 @@ class DeskWindow(FluentWidget):
         calibrate = Action(FIF.EDIT, "Calibrate height…", menu, triggered=self.calibrate)
         calibrate.setEnabled(bool(self.desk and self.desk.connected))
         menu.addAction(calibrate)
+        if alexa_link.configured():
+            alexa = Action(FIF.MICROPHONE, "Alexa", menu, checkable=True)
+            alexa.setChecked(bool(self.settings["alexa"]))
+            alexa.toggled.connect(self.set_alexa)
+            menu.addAction(alexa)
         menu.addSeparator()
         menu.addAction(Action(FIF.HELP, "Help", menu, triggered=self.show_help))
         button = self.settings_button
         menu.exec(button.mapToGlobal(QPoint(button.width() - menu.sizeHint().width(), button.height())))
+
+    def start_alexa(self) -> None:
+        if not alexa_link.configured():
+            return
+        try:
+            self.alexa = alexa_link.AlexaLink(self.handle_request)
+            self.alexa.start()
+        except Exception as e:
+            logging.exception("alexa: couldn't start")
+            self.alexa = None
+            self.show_error(e)
+            return
+        self.report_alexa()
+
+    def set_alexa(self, enabled: bool) -> None:
+        self.settings["alexa"] = enabled
+        save_settings(self.settings)
+        if enabled:
+            self.start_alexa()
+        elif self.alexa:
+            self.alexa.stop()
+            self.alexa = None
+
+    def report_alexa(self) -> None:
+        if not self.alexa:
+            return
+        self.alexa.report({
+            "desk": self.desk.state if self.desk else "nodesk",
+            "height_cm": None if self.current_cm() is None else round(self.current_cm(), 1),
+            "min_cm": round(self.to_cm(0), 1),
+            "max_cm": round(self.to_cm(MAX_POSITION), 1),
+            "presets": [{"name": p["name"], "height_cm": p["height_cm"]} for p in self.settings["presets"]],
+        })
 
     def show_help(self) -> None:
         self.show_window()
@@ -476,6 +523,7 @@ class DeskWindow(FluentWidget):
             self.motion_label.setText("")
             self.tray.setToolTip(f"Desk Control · {text}")
         self.render_tray_menu()
+        self.report_alexa()
 
     def on_position(self, position: int, speed: int) -> None:
         if self.height_label.text() == "--":
@@ -488,6 +536,7 @@ class DeskWindow(FluentWidget):
             self.motion_label.setText("Moving down…")
         else:
             self.motion_label.setText("")
+            self.report_alexa()
 
     def set_controls_enabled(self, enabled: bool) -> None:
         for w in (self.up_button, self.down_button, self.goto_button, self.stop_button,
@@ -568,6 +617,7 @@ class DeskWindow(FluentWidget):
             ))
         self.presets_layout.addStretch(1)
         self.render_tray_menu()
+        self.report_alexa()
 
     def render_tray_menu(self) -> None:
         menu = self.tray_menu
@@ -645,6 +695,8 @@ class DeskWindow(FluentWidget):
 
     async def shutdown(self) -> None:
         """Release the desk's connection; it only accepts one at a time."""
+        if self.alexa:
+            self.alexa.stop()
         if self._run_task:
             self._run_task.cancel()
             await asyncio.wait({self._run_task}, timeout=5)
