@@ -78,7 +78,7 @@ Other Linak desks that show up as “Desk” and a number should work too, but h
 1. Put the desk in **pairing mode**. On an IKEA Idåsen, hold the Bluetooth button on the handset until its light
    flashes blue.
 2. Open **Desk Control**. The **Choose your desk** list shows nearby Bluetooth devices, likely desks first. Desks
-   usually appear as “Desk” and a number, such as `Desk 6185`.
+   usually appear as “Desk” and a number, such as `Desk 1234`.
 3. Select your desk and click **Connect**. Desk Control pairs with it and checks it's a Linak desk controller. If
    you pick something else, it tells you and lets you choose again.
 
