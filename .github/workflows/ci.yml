@@ -31,3 +31,10 @@ jobs:
           timeout 10 docker run --rm -v "$PWD/data:/config" desk-agent || true
           sudo cat data/agent.json
           grep -q '"key"' data/agent.json
+      - name: With a Bluetooth proxy set, the agent starts and tries to reach it
+        run: |
+          echo '{"bluetooth_proxy": "192.0.2.1", "bluetooth_proxy_key": ""}' > options.json
+          timeout 15 docker run --rm -v "$PWD/data:/config" -v "$PWD/options.json:/data/options.json:ro" desk-agent > proxy.log 2>&1 || true
+          cat proxy.log
+          grep -q 'connecting to the Bluetooth proxy at 192.0.2.1' proxy.log
+          grep -q 'listening on port 8574' proxy.log

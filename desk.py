@@ -4,7 +4,7 @@ import logging
 import struct
 from typing import Callable, Optional
 
-from bleak import BleakClient, BleakScanner
+import bleak
 
 COMMAND = "99fa0002-338a-1024-8a49-009c0215f78a"
 HEIGHT = "99fa0021-338a-1024-8a49-009c0215f78a"
@@ -16,6 +16,9 @@ SERVICES = [
 ]
 
 log = logging.getLogger("desk")
+
+# bleak's classes are looked up when used (bleak.BleakClient), not imported by name: a Bluetooth proxy (proxy.py)
+# swaps in versions that route through it after this module has loaded.
 
 WAKEUP = bytes([0xFE, 0x00])
 STOP = bytes([0xFF, 0x00])
@@ -36,7 +39,7 @@ class NotLinakError(Exception):
 
 async def scan_devices(timeout: float = 6) -> list[dict]:
     """Nearby named BLE devices, likely desks first."""
-    found = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    found = await bleak.BleakScanner.discover(timeout=timeout, return_adv=True)
     devices = []
     for device, adv in found.values():
         name = device.name or adv.local_name
@@ -57,7 +60,7 @@ async def verify_desk(address: str, name: str = "This device") -> None:
     # Windows often drops the first connection attempt, so allow a second.
     for _ in range(2):
         try:
-            async with BleakClient(address, services=SERVICES, timeout=CONNECT_TIMEOUT, pair=True) as client:
+            async with bleak.BleakClient(address, services=SERVICES, timeout=CONNECT_TIMEOUT, pair=True) as client:
                 uuids = {service.uuid.lower() for service in client.services}
                 if not set(SERVICES) <= uuids:
                     try:
@@ -83,7 +86,7 @@ class LinakDesk:
         self.state = "disconnected"
         self.on_position: Callable[[int, int], None] = lambda pos, speed: None
         self.on_state: Callable[[str, str], None] = lambda state, detail: None
-        self._client: Optional[BleakClient] = None
+        self._client: Optional[bleak.BleakClient] = None
         self._motion: Optional[asyncio.Task] = None
 
     @property
@@ -107,7 +110,7 @@ class LinakDesk:
             dropped = asyncio.Event()
             self._set_state("connecting")
             try:
-                async with BleakClient(
+                async with bleak.BleakClient(
                     self.address,
                     disconnected_callback=lambda _: loop.call_soon_threadsafe(dropped.set),
                     services=SERVICES,
@@ -130,12 +133,12 @@ class LinakDesk:
                 self._cancel_motion()
             await asyncio.sleep(RETRY_DELAYS[min(failures, len(RETRY_DELAYS) - 1)])
 
-    def _require(self) -> BleakClient:
+    def _require(self) -> bleak.BleakClient:
         if not self.connected:
             raise RuntimeError("Desk is not connected")
         return self._client
 
-    async def _write_target(self, client: BleakClient, position: int) -> None:
+    async def _write_target(self, client: bleak.BleakClient, position: int) -> None:
         position = max(0, min(MAX_POSITION, int(position)))
         log.debug("target %d", position)
         await client.write_gatt_char(REFERENCE_INPUT, struct.pack("<H", position), response=True)

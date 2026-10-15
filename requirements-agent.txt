@@ -1,3 +1,7 @@
 # The desk agent (agent.py) only: no Qt.
 bleak==3.0.2
 paho-mqtt==2.1.0
+# Reaching the desk through an ESPHome Bluetooth proxy (proxy.py)
+bleak-esphome==4.1.0
+aioesphomeapi==46.12.1
+habluetooth==7.1.2

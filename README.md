@@ -118,17 +118,18 @@ Control isn't running, the widget offers to open it.
 
 ### Desk Control box (Home Assistant)
 
-If you have an always-on Home Assistant box near the desk, it can hold the desk's connection instead of your
-PC, so Alexa works while the PC is off.
+If you have an always-on Home Assistant box, it can hold the desk's connection instead of your PC, so Alexa
+works while the PC is off. The box can be near the desk, or anywhere on your network with an ESPHome Bluetooth
+proxy near the desk.
 
 1. In Home Assistant, open **Settings → Add-ons → Add-on store**, then **⋮ → Repositories**, and add
    `https://github.com/steves165/desk-control`.
 2. Install the **Desk Control** add-on, start it, and find the pairing key in its **Log** tab.
 3. In the app, open **Settings → Desk Control box…** and enter the box's address and the pairing key.
 
-The add-on's Documentation tab covers choosing the desk from the box and moving Alexa over. Without Home
-Assistant, run the agent on any always-on machine with Bluetooth: `pip install -r requirements-agent.txt`, then
-`python agent.py --data <folder>`.
+The add-on's Documentation tab covers choosing the desk from the box, using a Bluetooth proxy, and moving Alexa
+over. Without Home Assistant, run the agent on any always-on machine with Bluetooth (or a proxy):
+`pip install -r requirements-agent.txt`, then `python agent.py --data <folder> [--proxy <proxy address>]`.
 
 Help with all of this is also built into the app: click **?** in the top-right corner.
 
@@ -161,6 +162,7 @@ This removes the app, its shortcuts, the widget package and the signing certific
 | `widget/` | Widgets board provider in C# (Windows App SDK 1.8, out-of-process COM server), packaged as a signed MSIX by `build.ps1`. |
 | `alexa_link.py`, `alexa/` | Optional Alexa skill: the app's MQTT link to AWS IoT Core, the skill's Lambda function and its Terraform. See [alexa/README.md](alexa/README.md). |
 | `agent.py`, `remote.py` | The desk agent for an always-on box, and the app's client for it (protocol in `remote.py`). |
+| `proxy.py` | Optional: the agent reaches the desk through an ESPHome Bluetooth proxy, using [bleak-esphome](https://github.com/Bluetooth-Devices/bleak-esphome). |
 | `desk-agent/`, `repository.yaml` | The Home Assistant add-on that runs the agent. |
 | `probe.py` | Developer tool: pairs with a desk and lists its Bluetooth services. |
 | `install.ps1` / `uninstall.ps1` | Installer and uninstaller. `install.sh` runs `install.ps1` from WSL. |

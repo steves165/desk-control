@@ -1,5 +1,5 @@
 name: Desk Control
-version: "1.0.0"
+version: "1.1.0"
 slug: desk_control
 description: Keeps a Linak (IKEA Idåsen) standing desk connected, for the Desk Control app and its Alexa skill
 url: https://github.com/steves165/desk-control
@@ -9,8 +9,16 @@ arch:
 init: false
 startup: application
 boot: auto
-# Bluetooth goes through the host's BlueZ, over D-Bus.
+# Bluetooth goes through the host's BlueZ, over D-Bus, unless an ESPHome Bluetooth proxy is set below.
 host_dbus: true
+# A proxy near the desk (host name or address, and its API encryption key if it has one), for when the box is out
+# of Bluetooth range. Leave empty to use the box's own adapter.
+options:
+  bluetooth_proxy: ""
+  bluetooth_proxy_key: ""
+schema:
+  bluetooth_proxy: str?
+  bluetooth_proxy_key: password?
 ports:
   8574/tcp: 8574
 ports_description:

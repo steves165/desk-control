@@ -10,11 +10,9 @@ Desk* integration, and close the desk's phone app.
 
 ## Setting up
 
-1. **Bluetooth.** Home Assistant must see a Bluetooth adapter: check **Settings → Devices & services →
-   Bluetooth**. The box has to be within Bluetooth range of the desk (about 10 m, less through walls). If it
-   isn't, an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html) near the desk
-   doesn't help this add-on, which needs a local adapter; use a USB Bluetooth adapter on an extension lead
-   instead.
+1. **Bluetooth.** Either the box is within Bluetooth range of the desk (about 10 m, less through walls) and
+   Home Assistant sees its adapter under **Settings → Devices & services → Bluetooth**, or you use a
+   Bluetooth proxy near the desk (below).
 2. **Start the add-on** and open its **Log** tab. It shows the **pairing key** the app needs, for example:
 
    ```
@@ -29,6 +27,27 @@ Desk* integration, and close the desk's phone app.
    what the box can see, and the box pairs with the desk itself.
 
 To go back to connecting from the PC, open **Settings → Desk Control box…** and click **Use this PC**.
+
+## A Bluetooth proxy near the desk
+
+If the box is out of range (in a network cabinet, say), an ESP32 running ESPHome's
+[Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html) can sit near the desk and carry the
+connection over your network. One with wired Ethernet and Power over Ethernet, such as the **Olimex
+ESP32-POE-ISO-EA** (the EA version has an external antenna), needs just a network cable.
+
+1. **Install the proxy firmware.** Connect the board to your PC by USB, open ESPHome's
+   [ready-made projects](https://esphome.io/projects/?type=bluetooth) in Chrome or Edge, choose your board and
+   click **Connect**. Then plug it into a PoE network port near the desk.
+2. **Note its address.** Give it a fixed IP address in your router, or use its host name (such as
+   `esphome-web-123abc.local`). Home Assistant also discovers it: adding it there is fine, and it extends Home
+   Assistant's own Bluetooth too.
+3. **Point the add-on at it.** In the add-on's **Configuration** tab, set **bluetooth_proxy** to that address.
+   If the proxy has an API encryption key (one adopted into the ESPHome Device Builder does), set
+   **bluetooth_proxy_key** to it. Save, and restart the add-on. Its log says
+   `connecting to the Bluetooth proxy at …`, then `Bluetooth proxy connected`.
+
+The add-on then uses only the proxy, not the box's own adapter. A proxy has three connection slots, and the desk
+keeps one in use.
 
 ## Alexa
 

@@ -7,7 +7,10 @@ protocol. Everything it keeps is in the data folder:
 - agent.json: the pairing key the app needs, made on first start;
 - alexa/: the Alexa device certificate and settings (from alexa/export.py), if you use Alexa.
 
-Usage: python agent.py [--data FOLDER] [--port 8574] [--listen ADDRESS]
+It uses the machine's own Bluetooth adapter, or an ESPHome Bluetooth proxy near the desk (proxy.py) when given one
+with --proxy, or with bluetooth_proxy in a Home Assistant add-on's options file (--options).
+
+Usage: python agent.py [--data FOLDER] [--port 8574] [--listen ADDRESS] [--proxy HOST [--proxy-key KEY]]
 """
 import argparse
 import asyncio
@@ -26,6 +29,7 @@ if sys.platform == "win32":
 
 import alexa_link
 import remote
+from proxy import Proxy
 from desk import MAX_POSITION, LinakDesk, NotLinakError, scan_devices, verify_desk
 
 DEFAULT_SETTINGS = {"address": None, "desk_name": None, "offset_mm": 620.0, "presets": []}
@@ -34,8 +38,9 @@ log = logging.getLogger("agent")
 
 
 class Agent:
-    def __init__(self, data: Path):
+    def __init__(self, data: Path, proxy: Proxy | None = None):
         self.data = data
+        self.proxy = proxy
         self.data.mkdir(parents=True, exist_ok=True)
         self.settings = {**DEFAULT_SETTINGS, **self._load("settings.json")}
         agent = self._load("agent.json")
@@ -254,6 +259,8 @@ class Agent:
     async def run(self, port: int, listen: str | None = None) -> None:
         server = await asyncio.start_server(self.serve, listen, port)
         log.info("listening on port %d; pairing key %s", port, self.key)
+        if self.proxy:
+            await self.proxy.start()
         alexa_folder = self.data / "alexa"
         if alexa_link.configured(alexa_folder):
             self.alexa = alexa_link.AlexaLink(self.on_alexa, alexa_folder)
@@ -271,6 +278,17 @@ class Agent:
             if self.alexa:
                 self.alexa.stop()
             await self.stop_desk()
+            if self.proxy:
+                await self.proxy.stop()
+
+
+def proxy_settings(host: str | None, key: str | None, options: Path | None) -> tuple[str | None, str | None]:
+    """The proxy to use: an add-on's options win over the command line and environment."""
+    if options and options.exists():
+        values = json.loads(options.read_text())
+        host = (values.get("bluetooth_proxy") or "").strip() or host
+        key = (values.get("bluetooth_proxy_key") or "").strip() or key
+    return host or None, key or None
 
 
 def main() -> None:
@@ -278,12 +296,19 @@ def main() -> None:
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("DESK_CONTROL_DATA", "data")))
     parser.add_argument("--port", type=int, default=remote.PORT)
     parser.add_argument("--listen", default=None, help="address to listen on (default: all)")
+    parser.add_argument("--proxy", default=os.environ.get("DESK_CONTROL_PROXY"),
+                        help="reach the desk through this ESPHome Bluetooth proxy (host name or address)")
+    parser.add_argument("--proxy-key", default=os.environ.get("DESK_CONTROL_PROXY_KEY"),
+                        help="the proxy's API encryption key, if it has one")
+    parser.add_argument("--options", type=Path, help="a Home Assistant add-on's options file (bluetooth_proxy, "
+                                                     "bluetooth_proxy_key)")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+    proxy_host, proxy_key = proxy_settings(args.proxy, args.proxy_key, args.options)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format="%(asctime)s %(message)s", stream=sys.stdout)
     try:
-        asyncio.run(Agent(args.data).run(args.port, args.listen))
+        asyncio.run(Agent(args.data, Proxy(proxy_host, proxy_key) if proxy_host else None).run(args.port, args.listen))
     except KeyboardInterrupt:
         pass
 
